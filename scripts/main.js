@@ -8,6 +8,9 @@ import {
 const CHECK_INTERVAL = 5;
 const SEARCH_RADIUS = 40;
 const SEARCH_RADIUS_SQ = SEARCH_RADIUS * SEARCH_RADIUS;
+const MIN_SPAWN_DISTANCE = SEARCH_RADIUS / 2;
+const MIN_SPAWN_DISTANCE_SQ =
+    MIN_SPAWN_DISTANCE * MIN_SPAWN_DISTANCE;
 
 const MAX_CUBES = 10;
 const CUBE_LIFETIME = 12000;
@@ -184,6 +187,27 @@ system.runInterval(() => {
             continue;
         }
 
+// 実際のサルファーキューブ出現座標
+const spawnLocation = {
+    x: surface.x + 0.5,
+    y: surface.y + 1,
+    z: surface.z + 0.5
+};
+
+// いずれかのプレイヤーに近すぎる場合はスポーン失敗
+if (isTooCloseToAnyPlayer(players, dimensionId, spawnLocation)) {
+    debugSpawnResult(
+        player,
+        surface.block.typeId,
+        surface.x,
+        surface.y,
+        surface.z,
+        false,
+        "プレイヤーに近すぎる"
+    );
+    continue;
+}
+
         const surfaceBlockId = surface.block.typeId;
 
         // 最初に見つかったブロックが吸収可能でなければスポーン失敗
@@ -227,11 +251,7 @@ system.runInterval(() => {
 
         const spawned = spawnCube(
             dimension,
-            {
-                x: surface.x + 0.5,
-                y: surface.y + 1,
-                z: surface.z + 0.5
-            },
+           spawnLocation,
             selectedBlockId,
             currentTick
         );
@@ -601,6 +621,24 @@ function cleanupOldCubes(dimension, currentTick) {
     }
 }
 
+
+// 同じディメンションにいるプレイヤーの近くならスポーンを拒否
+function isTooCloseToAnyPlayer(players, dimensionId, location) {
+    return players.some((player) => {
+        if (player.dimension.id !== dimensionId) {
+            return false;
+        }
+
+        const dx = player.location.x - location.x;
+        const dy = player.location.y - location.y;
+        const dz = player.location.z - location.z;
+
+        const distanceSq =
+            dx * dx + dy * dy + dz * dz;
+
+        return distanceSq <= MIN_SPAWN_DISTANCE_SQ;
+    });
+}
 
 // 近くに既存のサルファーキューブがいるか確認
 function cubeExistsNearby(dimension, location) {
