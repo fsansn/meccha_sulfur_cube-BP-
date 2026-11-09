@@ -323,7 +323,6 @@ function spawnCube(dimension, location, blockId, currentTick) {
 
 
 // 30秒ごとに、このアドオンが召喚した全サルファーキューブから笛を鳴らす。
-// 2回目の音は、1回目の10 tick（0.5秒）後に再生する。
 function playFluteForAddonCubes(volume,pitch) {
     const overworld = world.getDimension("minecraft:overworld");
     const cubes = overworld.getEntities({
@@ -347,8 +346,16 @@ system.runInterval(() => {
     playFluteForAddonCubes(3, 2.0);
 
     system.runTimeout(() => {
+        playFluteForAddonCubes(2.5, 1.75);
+    }, 5);
+
+    system.runTimeout(() => {
         playFluteForAddonCubes(2, 1.5);
     }, 10);
+
+    system.runTimeout(() => {
+        playFluteForAddonCubes(1.5, 1.25);
+    }, 15);
 
     system.runTimeout(() => {
         playFluteForAddonCubes(1, 1.0);
