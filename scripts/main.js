@@ -36,6 +36,63 @@ const SULFUR_CUBE_ARCHETYPE_TAGS = [
     "minecraft:sulfur_cube_archetype_hot"
 ];
 
+// スポーン位置として許可するブロック
+const SPAWNABLE_BLOCK_IDS = new Set([
+    "minecraft:deadbush", // 枯れ木
+    "minecraft:bush", // 茂み
+    "minecraft:firefly_bush", // ホタルの茂み
+    "minecraft:red_shrub", // 赤色の低木
+    "minecraft:vine", // ツタ
+    "minecraft:cave_vines", // 洞窟のツタ
+    "minecraft:cave_vines_body_with_berries", // 洞窟のツタのツル（実付き・胴体）
+    "minecraft:cave_vines_head_with_berries", // 洞窟のツタのツル（実付き・先端）
+    "minecraft:pale_hanging_moss", // 色褪せた垂れ苔
+
+    "minecraft:dandelion", // タンポポ
+    "minecraft:poppy", // ポピー
+    "minecraft:blue_orchid", // ヒスイラン
+    "minecraft:allium", // アリウム
+    "minecraft:azure_bluet", // ヒナソウ
+    "minecraft:red_tulip", // 赤色のチューリップ
+    "minecraft:orange_tulip", // 橙色のチューリップ
+    "minecraft:white_tulip", // 白色のチューリップ
+    "minecraft:pink_tulip", // 桃色のチューリップ
+    "minecraft:oxeye_daisy", // フランスギク
+    "minecraft:cornflower", // ヤグルマギク
+    "minecraft:lily_of_the_valley", // スズラン
+    "minecraft:torchflower", // トーチフラワー
+    "minecraft:open_eyeblossom", // 開いたヒトミソウ
+    "minecraft:closed_eyeblossom", // 閉じたヒトミソウ
+    "minecraft:spore_blossom", // 胞子の花
+    "minecraft:cactus_flower", // サボテンの花
+    "minecraft:pink_petals", // 桜色の花びら
+    "minecraft:wildflowers", // 野花
+    "minecraft:leaf_litter", // 落ち葉
+
+    "minecraft:brown_mushroom", // 茶色のキノコ
+    "minecraft:red_mushroom", // 赤色のキノコ
+    "minecraft:glow_lichen", // ヒカリゴケ
+    "minecraft:crimson_fungus", // 真紅のキノコ
+    "minecraft:warped_fungus", // 歪んだキノコ
+    "minecraft:weeping_vines", // しだれツタ
+    "minecraft:twisting_vines", // ねじれツタ
+
+    "minecraft:resin_clump", // 樹脂の塊
+    "minecraft:reeds", // サトウキビ
+
+    "minecraft:torch", // 松明（床・壁）
+    "minecraft:soul_torch", // 魂の松明（床・壁）
+    "minecraft:copper_torch", // 銅の松明（床・壁）
+
+    "minecraft:rail", // レール
+    "minecraft:golden_rail", // パワードレール
+    "minecraft:detector_rail", // ディテクターレール
+    "minecraft:activator_rail", // アクティベーターレール
+
+    "minecraft:redstone_wire", // レッドストーンダスト
+    "minecraft:redstone_torch" // レッドストーントーチ（床・壁）
+]);
+
 const lastChunk = new Map();
 let spawnSequence = 0;
 
@@ -209,8 +266,9 @@ function debugSpawnResult(player, blockId, x, y, z, success, reason = "") {
 }
 
 
-// プレイヤーの高さから空気との界面を探す。
-// 開始地点がAirなら下へ、非Airなら上へ探索する。
+// プレイヤーの高さからスポーン可能空間との界面を探す。
+// 空気または許可ブロックなら下へ、
+// それ以外なら上へ探索する。
 // ディメンションの高度範囲を超えた場合は失敗扱い。
 function findSurfaceBlock(dimension, x, z, startY) {
     const minY = dimension.heightRange.min;
@@ -238,8 +296,8 @@ function findSurfaceBlock(dimension, x, z, startY) {
         return undefined;
     }
 
-    // 開始地点がAirなら下方向へ探索
-    if (isAirBlock(initialBlock)) {
+    // 開始地点がスポーン可能空間なら下方向へ探索
+    if (isSpawnSpaceBlock(initialBlock)) {
         for (let y = initialY - 1; y >= minY; y--) {
             let block;
 
@@ -253,13 +311,14 @@ function findSurfaceBlock(dimension, x, z, startY) {
                 return undefined;
             }
 
-            if (!isAirBlock(block)) {
+            // スポーン可能空間でないブロックを足場候補とする
+            if (!isSpawnSpaceBlock(block)) {
                 return { block, x, y, z };
             }
         }
     }
 
-    // 開始地点が非Airなら上方向へ探索
+    // 開始地点がスポーン可能空間でなければ上方向へ探索
     else {
         for (let y = initialY + 1; y <= maxY; y++) {
             let block;
@@ -274,7 +333,9 @@ function findSurfaceBlock(dimension, x, z, startY) {
                 return undefined;
             }
 
-            if (isAirBlock(block)) {
+            // 最初にスポーン可能空間が見つかったら、
+            // その直下を足場候補とする
+            if (isSpawnSpaceBlock(block)) {
                 const surfaceY = y - 1;
 
                 let surfaceBlock;
@@ -307,7 +368,6 @@ function findSurfaceBlock(dimension, x, z, startY) {
     return undefined;
 }
 
-
 // Air判定
 function isAirBlock(block) {
     return (
@@ -317,6 +377,13 @@ function isAirBlock(block) {
     );
 }
 
+// 空気または許可リストに含まれるブロックか判定
+function isSpawnSpaceBlock(block) {
+    return (
+        isAirBlock(block) ||
+        SPAWNABLE_BLOCK_IDS.has(block.typeId)
+    );
+}
 
 // バニラのサルファーキューブ用アイテムタグを利用して吸収可能か判定
 function isTransformableBlock(block) {
