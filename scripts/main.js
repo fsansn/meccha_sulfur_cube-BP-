@@ -17,10 +17,10 @@ const CUBE_TYPE = "minecraft:sulfur_cube";
 const CUBE_TAG = "msc_cube";
 const CUBE_TIME_PREFIX = "msc_cube_time_";
 
-// デバッグ表示（true の場合、スポーン候補地点の検索結果をチャットに表示）
+// デバッグ表示
 const DEBUG_MODE = false;
-// バニラがサルファーキューブの吸収対象として定義しているアイテムタグ。
-// これらのタグに含まれるブロックだけを、変身可能なフルブロックとして扱う。
+
+// バニラがサルファーキューブの吸収対象として定義しているアイテムタグ
 const SULFUR_CUBE_ARCHETYPE_TAGS = [
     "minecraft:sulfur_cube_archetype_bouncy",
     "minecraft:sulfur_cube_archetype_regular",
@@ -35,28 +35,49 @@ const SULFUR_CUBE_ARCHETYPE_TAGS = [
     "minecraft:sulfur_cube_archetype_explosive",
     "minecraft:sulfur_cube_archetype_hot"
 ];
+
 const lastChunk = new Map();
 let spawnSequence = 0;
 
+
+// プレイヤーが現在いるディメンションを取得する
+// ディメンションIDを固定列挙せず、動的に対応する
+function getActiveDimensions(players = world.getPlayers()) {
+    const dimensions = new Map();
+
+    for (const player of players) {
+        const dimension = player.dimension;
+        dimensions.set(dimension.id, dimension);
+    }
+
+    return dimensions;
+}
+
+
+// 定期的なスポーン抽選
 system.runInterval(() => {
-    const overworld = world.getDimension("minecraft:overworld");
-    const spawnY = overworld.heightRange.max - 1;
+    const players = world.getPlayers();
+    const activeDimensions = getActiveDimensions(players);
     const currentTick = world.getAbsoluteTime();
 
-    cleanupOldCubes(overworld, currentTick);
+    // プレイヤーがいる全ディメンションで寿命管理
+    for (const dimension of activeDimensions.values()) {
+        cleanupOldCubes(dimension, currentTick);
+    }
 
-    for (const player of world.getPlayers()) {
-        if (player.dimension.id !== "minecraft:overworld") {
-            continue;
-        }
+    for (const player of players) {
+        const dimension = player.dimension;
+        const dimensionId = dimension.id;
+
         const chunkX = Math.floor(player.location.x / 16);
         const chunkZ = Math.floor(player.location.z / 16);
 
         const previousChunk = lastChunk.get(player.id);
 
-        // プレイヤーが別チャンクへ移動した時だけスポーン抽選
+        // プレイヤーが別ディメンションまたは別チャンクへ移動した時だけスポーン抽選
         if (
             previousChunk &&
+            previousChunk.dimensionId === dimensionId &&
             previousChunk.x === chunkX &&
             previousChunk.z === chunkZ
         ) {
@@ -64,44 +85,50 @@ system.runInterval(() => {
         }
 
         lastChunk.set(player.id, {
+            dimensionId,
             x: chunkX,
             z: chunkZ
         });
-        if (cubeExistsNearby(overworld, player.location)) {
+
+        if (cubeExistsNearby(dimension, player.location)) {
             continue;
         }
 
-        // Sky Gift と同じ、半径40ブロックの円内からランダムに選ぶ
+        // 半径40ブロックの円内からランダムに選ぶ
         const angle = Math.random() * Math.PI * 2;
         const distance = Math.sqrt(Math.random()) * SEARCH_RADIUS;
 
         const targetX = Math.floor(
             player.location.x + Math.cos(angle) * distance
         );
+
         const targetZ = Math.floor(
             player.location.z + Math.sin(angle) * distance
         );
-        // 上空から下へ検索し、最初に見つかった非Airブロックだけを判定
+
+        // プレイヤーの足元の高さから上下どちらかへ探索
         const surface = findSurfaceBlock(
-            overworld,
+            dimension,
             targetX,
             targetZ,
-            spawnY
+            Math.floor(player.location.y)
         );
 
         if (!surface) {
             debugSpawnResult(
                 player,
+                "不明",
                 targetX,
                 "不明",
                 targetZ,
                 false,
-                "検索中にブロックを取得できなかった／地面が見つからなかった"
+                "検索中にブロックを取得できなかった／界面が見つからなかった"
             );
             continue;
         }
 
         const surfaceBlockId = surface.block.typeId;
+
         // 最初に見つかったブロックが吸収可能でなければスポーン失敗
         if (!isTransformableBlock(surface.block)) {
             debugSpawnResult(
@@ -115,14 +142,16 @@ system.runInterval(() => {
             );
             continue;
         }
+
         // 真下・東西南北の計5ブロックから変身先候補を集める
         const candidates = findTransformCandidates(
-            overworld,
+            dimension,
             surface.x,
             surface.y,
             surface.z,
             surface.block
         );
+
         if (candidates.length === 0) {
             debugSpawnResult(
                 player,
@@ -138,8 +167,9 @@ system.runInterval(() => {
 
         const selectedBlockId =
             candidates[Math.floor(Math.random() * candidates.length)];
+
         const spawned = spawnCube(
-            overworld,
+            dimension,
             {
                 x: surface.x + 0.5,
                 y: surface.y + 1,
@@ -148,6 +178,7 @@ system.runInterval(() => {
             selectedBlockId,
             currentTick
         );
+
         debugSpawnResult(
             player,
             surfaceBlockId,
@@ -155,7 +186,9 @@ system.runInterval(() => {
             surface.y,
             surface.z,
             spawned,
-            spawned ? `変身先: ${selectedBlockId}` : "エンティティ生成または装備処理に失敗"
+            spawned
+                ? `変身先: ${selectedBlockId}`
+                : "エンティティ生成または装備処理に失敗"
         );
     }
 }, CHECK_INTERVAL);
@@ -166,6 +199,7 @@ function debugSpawnResult(player, blockId, x, y, z, success, reason = "") {
     if (!DEBUG_MODE) {
         return;
     }
+
     const resultText = success ? "成功" : "失敗";
     const detail = reason ? ` / ${reason}` : "";
 
@@ -175,33 +209,106 @@ function debugSpawnResult(player, blockId, x, y, z, success, reason = "") {
 }
 
 
-// 上空から最初の非Airブロックを探す。
-// チャンク未ロードなどで取得できない場合は、その地点の検索を失敗扱いにする。
+// プレイヤーの高さから空気との界面を探す。
+// 開始地点がAirなら下へ、非Airなら上へ探索する。
+// ディメンションの高度範囲を超えた場合は失敗扱い。
 function findSurfaceBlock(dimension, x, z, startY) {
     const minY = dimension.heightRange.min;
+    const maxY = dimension.heightRange.max - 1;
 
-    for (let y = startY; y >= minY; y--) {
-        let block;
-        try {
-            block = dimension.getBlock({ x, y, z });
-        } catch {
-            return undefined;
-        }
+    // 探索開始Yをディメンションの範囲内に収める
+    const initialY = Math.max(
+        minY,
+        Math.min(maxY, startY)
+    );
 
-        if (!block) {
-            return undefined;
-        }
+    let initialBlock;
 
-        if (isAirBlock(block)) {
-            continue;
-        }
-
-        return { block, x, y, z };
+    try {
+        initialBlock = dimension.getBlock({
+            x,
+            y: initialY,
+            z
+        });
+    } catch {
+        return undefined;
     }
 
+    if (!initialBlock) {
+        return undefined;
+    }
+
+    // 開始地点がAirなら下方向へ探索
+    if (isAirBlock(initialBlock)) {
+        for (let y = initialY - 1; y >= minY; y--) {
+            let block;
+
+            try {
+                block = dimension.getBlock({ x, y, z });
+            } catch {
+                return undefined;
+            }
+
+            if (!block) {
+                return undefined;
+            }
+
+            if (!isAirBlock(block)) {
+                return { block, x, y, z };
+            }
+        }
+    }
+
+    // 開始地点が非Airなら上方向へ探索
+    else {
+        for (let y = initialY + 1; y <= maxY; y++) {
+            let block;
+
+            try {
+                block = dimension.getBlock({ x, y, z });
+            } catch {
+                return undefined;
+            }
+
+            if (!block) {
+                return undefined;
+            }
+
+            if (isAirBlock(block)) {
+                const surfaceY = y - 1;
+
+                let surfaceBlock;
+
+                try {
+                    surfaceBlock = dimension.getBlock({
+                        x,
+                        y: surfaceY,
+                        z
+                    });
+                } catch {
+                    return undefined;
+                }
+
+                if (!surfaceBlock) {
+                    return undefined;
+                }
+
+                return {
+                    block: surfaceBlock,
+                    x,
+                    y: surfaceY,
+                    z
+                };
+            }
+        }
+    }
+
+    // ディメンションの上下限まで探索しても界面がなかった
     return undefined;
 }
 
+
+// Air判定
 function isAirBlock(block) {
     return (
         block.typeId === "minecraft:air" ||
@@ -211,8 +318,7 @@ function isAirBlock(block) {
 }
 
 
-// バニラのサルファーキューブ用アイテムタグを利用して吸収可能か判定。
-// タグの対象はサルファーキューブが実際に吸収できるブロック群。
+// バニラのサルファーキューブ用アイテムタグを利用して吸収可能か判定
 function isTransformableBlock(block) {
     try {
         const item = new ItemStack(block.typeId, 1);
@@ -225,7 +331,8 @@ function isTransformableBlock(block) {
     }
 }
 
-// 中心ブロックは、スポーン判定を通過したブロック。
+
+// 中心ブロックはスポーン判定を通過したブロック。
 // 周囲4ブロックは同じY座標で検索する。
 function findTransformCandidates(
     dimension,
@@ -246,6 +353,7 @@ function findTransformCandidates(
 
     for (const offset of offsets) {
         let block;
+
         if (offset.x === 0 && offset.z === 0) {
             block = centerBlock;
         } else {
@@ -270,6 +378,7 @@ function findTransformCandidates(
     return candidates;
 }
 
+
 // サルファーキューブを生成し、選んだブロックを持たせる
 function spawnCube(dimension, location, blockId, currentTick) {
     let cube;
@@ -280,24 +389,27 @@ function spawnCube(dimension, location, blockId, currentTick) {
         cube.addTag(CUBE_TAG);
         cube.addTag(`${CUBE_TIME_PREFIX}${currentTick}`);
 
-        // サルファーキューブの装備処理は、まず生成個体を対象にコマンドで試す。
+        // 生成個体を一時タグで指定
         const pendingTag = `msc_pending_${spawnSequence++}`;
         cube.addTag(pendingTag);
+
         dimension.runCommand(
             `replaceitem entity @e[type=${CUBE_TYPE},tag=${pendingTag}] slot.weapon.mainhand 0 ${blockId} 1`
         );
+
+        // 恒久的な透明化
         dimension.runCommand(
-    `effect @e[type=${CUBE_TYPE},tag=${pendingTag}] invisibility infinite 0 true`
-);
+            `effect @e[type=${CUBE_TYPE},tag=${pendingTag}] invisibility infinite 0 true`
+        );
 
         cube.removeTag(pendingTag);
-
     } catch (error) {
         if (cube) {
             try {
                 cube.remove();
             } catch {}
         }
+
         return false;
     }
 
@@ -308,6 +420,7 @@ function spawnCube(dimension, location, blockId, currentTick) {
             tags: [CUBE_TAG]
         })
     ];
+
     cubes.sort((a, b) => getCubeTime(a) - getCubeTime(b));
 
     while (cubes.length > MAX_CUBES) {
@@ -323,25 +436,32 @@ function spawnCube(dimension, location, blockId, currentTick) {
 
 
 // 30秒ごとに、このアドオンが召喚した全サルファーキューブから笛を鳴らす。
-function playFluteForAddonCubes(volume,pitch) {
-    const overworld = world.getDimension("minecraft:overworld");
-    const cubes = overworld.getEntities({
-        type: CUBE_TYPE,
-        tags: [CUBE_TAG]
-    });
+// プレイヤーがいるディメンションを動的に取得する。
+function playFluteForAddonCubes(volume, pitch) {
+    const activeDimensions = getActiveDimensions();
 
-    for (const cube of cubes) {
-        const { x, y, z } = cube.location;
-        try {
-            overworld.runCommand(
-                `playsound note.flute @a ${x} ${y} ${z} ${volume} ${pitch}`
-            );
-        } catch {
-            // 個別の再生失敗で、ほかのキューブへの再生を止めない
+    for (const dimension of activeDimensions.values()) {
+        const cubes = dimension.getEntities({
+            type: CUBE_TYPE,
+            tags: [CUBE_TAG]
+        });
+
+        for (const cube of cubes) {
+            const { x, y, z } = cube.location;
+
+            try {
+                dimension.runCommand(
+                    `playsound note.flute @a ${x} ${y} ${z} ${volume} ${pitch}`
+                );
+            } catch {
+                // 個別の再生失敗で、ほかのキューブへの再生を止めない
+            }
         }
     }
 }
 
+
+// 30秒ごとに5段階の笛を再生
 system.runInterval(() => {
     playFluteForAddonCubes(3, 2.0);
 
@@ -378,6 +498,8 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
     openCube(cube);
 });
 
+
+// 報酬を出してサルファーキューブを削除
 function openCube(cube) {
     try {
         cube.dimension.spawnItem(
@@ -400,6 +522,7 @@ function cleanupOldCubes(dimension, currentTick) {
             tags: [CUBE_TAG]
         })
     ];
+
     for (const cube of cubes) {
         const age = currentTick - getCubeTime(cube);
 
@@ -420,6 +543,7 @@ function cubeExistsNearby(dimension, location) {
             tags: [CUBE_TAG]
         })
     ];
+
     for (const cube of cubes) {
         const dx = cube.location.x - location.x;
         const dz = cube.location.z - location.z;
@@ -433,6 +557,7 @@ function cubeExistsNearby(dimension, location) {
 
     return false;
 }
+
 
 // タグから生成Tickを取得
 function getCubeTime(entity) {
