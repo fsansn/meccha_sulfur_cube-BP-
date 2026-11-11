@@ -665,9 +665,73 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
 });
 
 
+
+// キューブ発見時の爆発演出
+function playCubeBurst(dimension, location) {
+    // 大きな爆発を中心に発生
+    try {
+        dimension.spawnParticle(
+            "minecraft:huge_explosion_emitter",
+            location
+        );
+    } catch {}
+
+    // 緑・金色の粒子を周囲に散らす
+    for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 0.4 + Math.random() * 0.9;
+
+        const particleLocation = {
+            x: location.x + Math.cos(angle) * radius,
+            y: location.y + Math.random() * 1.2,
+            z: location.z + Math.sin(angle) * radius
+        };
+
+        try {
+            dimension.spawnParticle(
+                "minecraft:totem_particle",
+                particleLocation
+            );
+        } catch {}
+    }
+
+    // 白いきらめきを追加
+    for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 0.3 + Math.random() * 1.2;
+
+        const particleLocation = {
+            x: location.x + Math.cos(angle) * radius,
+            y: location.y + Math.random() * 1.5,
+            z: location.z + Math.sin(angle) * radius
+        };
+
+        try {
+            dimension.spawnParticle(
+                "minecraft:endrod",
+                particleLocation
+            );
+        } catch {}
+    }
+
+    // 花火の爆発音
+    try {
+        dimension.playSound(
+            "firework.blast",
+            location,
+            {
+                volume: 1.0,
+                pitch: 1.0
+            }
+        );
+    } catch {}
+}
+
 // 報酬を出してサルファーキューブを削除
 
 function openCube(cube) {
+        // 報酬処理やエンティティ削除より先に演出
+    playCubeBurst(cube.dimension, { ...cube.location });
     // 実際に付与されているTierタグをすべて確認
     const matchedTags = Object.keys(TIER_REWARDS).filter(
         tag => cube.hasTag(tag)
