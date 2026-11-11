@@ -19,6 +19,33 @@ const CUBE_LIFETIME = 12000;
 const CUBE_TYPE = "minecraft:sulfur_cube";
 const CUBE_TAG = "msc_cube";
 const CUBE_TIME_PREFIX = "msc_cube_time_";
+// 発見難易度Tierのタグ
+const TIER_TAG_PREFIX = "msc_tier_";
+
+// Tierごとの報酬
+// 将来、Tierごとにアイテムや個数を変更できるよう明示的に定義
+const TIER_REWARDS = {
+    "msc_tier_1": {
+        itemId: "minecraft:emerald",
+        amount: 1
+    },
+    "msc_tier_2": {
+        itemId: "minecraft:emerald",
+        amount: 2
+    },
+    "msc_tier_3": {
+        itemId: "minecraft:emerald",
+        amount: 3
+    },
+    "msc_tier_4": {
+        itemId: "minecraft:emerald",
+        amount: 4
+    },
+    "msc_tier_5": {
+        itemId: "minecraft:emerald",
+        amount: 5
+    }
+};
 
 // デバッグ表示
 const DEBUG_MODE = false;
@@ -253,7 +280,8 @@ if (isTooCloseToAnyPlayer(players, dimensionId, spawnLocation)) {
             dimension,
            spawnLocation,
             selectedBlockId,
-            currentTick
+            currentTick,
+    candidates.length
         );
 
         debugSpawnResult(
@@ -467,7 +495,7 @@ function findTransformCandidates(
 
 
 // サルファーキューブを生成し、選んだブロックを持たせる
-function spawnCube(dimension, location, blockId, currentTick) {
+function spawnCube(dimension, location, blockId, currentTick, tier) {
     let cube;
 
     try {
@@ -475,6 +503,7 @@ function spawnCube(dimension, location, blockId, currentTick) {
 
         cube.addTag(CUBE_TAG);
         cube.addTag(`${CUBE_TIME_PREFIX}${currentTick}`);
+        cube.addTag(`${TIER_TAG_PREFIX}${tier}`);
 
         // 生成個体を一時タグで指定
         const pendingTag = `msc_pending_${spawnSequence++}`;
@@ -588,9 +617,20 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
 
 // 報酬を出してサルファーキューブを削除
 function openCube(cube) {
+    // Tierタグから報酬を取得
+    // Tierタグがない場合はTier1の報酬にする
+    let reward = TIER_REWARDS["msc_tier_1"];
+
+    for (const [tag, definition] of Object.entries(TIER_REWARDS)) {
+        if (cube.hasTag(tag)) {
+            reward = definition;
+            break;
+        }
+    }
+
     try {
         cube.dimension.spawnItem(
-            new ItemStack("minecraft:emerald", 1),
+            new ItemStack(reward.itemId, reward.amount),
             cube.location
         );
     } catch {}
