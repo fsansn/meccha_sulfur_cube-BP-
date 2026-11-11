@@ -22,6 +22,7 @@ const CUBE_LIFETIME = 12000;
 const CUBE_TYPE = "minecraft:sulfur_cube";
 const CUBE_TAG = "msc_cube";
 const CUBE_TIME_PREFIX = "msc_cube_time_";
+const FLUTE_INTERVAL = 600; // 30秒
 // 発見難易度Tierのタグ
 const TIER_TAG_PREFIX = "msc_tier_";
 
@@ -125,7 +126,8 @@ const SPAWNABLE_BLOCK_IDS = new Set([
 
 const lastChunk = new Map();
 let spawnSequence = 0;
-
+let nextFluteTick = system.currentTick + FLUTE_INTERVAL;
+const clockDisplayPlayers = new Set();
 
 // プレイヤーが現在いるディメンションを取得する
 // ディメンションIDを固定列挙せず、動的に対応する
@@ -580,6 +582,9 @@ function playFluteForAddonCubes(volume, pitch) {
 
 // 30秒ごとに5段階の笛を再生
 system.runInterval(() => {
+    // 次回の笛までの時間を更新
+    nextFluteTick = system.currentTick + FLUTE_INTERVAL;
+
     playFluteForAddonCubes(3, 2.0);
 
     system.runTimeout(() => {
@@ -597,8 +602,52 @@ system.runInterval(() => {
     system.runTimeout(() => {
         playFluteForAddonCubes(1, 1.0);
     }, 20);
-}, 600);
+}, FLUTE_INTERVAL);
 
+// 右手に時計を持っているプレイヤーに、次の笛までの時間を表示
+system.runInterval(() => {
+    const players = world.getPlayers();
+
+    for (const player of players) {
+        let hasClock = false;
+
+        try {
+            const inventory = player.getComponent("minecraft:inventory");
+            const heldItem = inventory?.container?.getItem(
+                player.selectedSlotIndex
+            );
+
+            hasClock = heldItem?.typeId === "minecraft:clock";
+        } catch {}
+
+        if (hasClock) {
+            const remainingSeconds = Math.max(
+                0,
+                Math.ceil((nextFluteTick - system.currentTick) / 20)
+            );
+
+            player.onScreenDisplay.setActionBar(
+                `次の笛まで: ${remainingSeconds}秒`
+            );
+
+            clockDisplayPlayers.add(player.id);
+
+        } else if (clockDisplayPlayers.has(player.id)) {
+            // 時計を手放したら表示を消す
+            player.onScreenDisplay.setActionBar("");
+            clockDisplayPlayers.delete(player.id);
+        }
+    }
+
+    // 切断済みプレイヤーのIDを整理
+    const onlinePlayerIds = new Set(players.map(player => player.id));
+
+    for (const playerId of clockDisplayPlayers) {
+        if (!onlinePlayerIds.has(playerId)) {
+            clockDisplayPlayers.delete(playerId);
+        }
+    }
+}, 20);
 
 // サルファーキューブを叩いたら報酬を出す
 world.afterEvents.entityHitEntity.subscribe((event) => {
