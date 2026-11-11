@@ -717,7 +717,7 @@ function playCubeBurst(dimension, location) {
     // 花火の爆発音
     try {
         dimension.playSound(
-            "firework.blast",
+            "firework.twinkle",
             location,
             {
                 volume: 1.0,
