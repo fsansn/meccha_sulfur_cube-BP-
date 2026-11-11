@@ -4,6 +4,9 @@ import {
     ItemStack
 } from "@minecraft/server";
 
+// デバッグ表示
+const DEBUG_MODE = false;
+
 // Sky Gift から引き継ぐ設定
 const CHECK_INTERVAL = 5;
 const SEARCH_RADIUS = 40;
@@ -46,9 +49,6 @@ const TIER_REWARDS = {
         amount: 5
     }
 };
-
-// デバッグ表示
-const DEBUG_MODE = false;
 
 // バニラがサルファーキューブの吸収対象として定義しているアイテムタグ
 const SULFUR_CUBE_ARCHETYPE_TAGS = [
@@ -252,13 +252,13 @@ if (isTooCloseToAnyPlayer(players, dimensionId, spawnLocation)) {
         }
 
         // 真下・東西南北の計5ブロックから変身先候補を集める
-        const candidates = findTransformCandidates(
-            dimension,
-            surface.x,
-            surface.y,
-            surface.z,
-            surface.block
-        );
+const candidates = findTransformCandidates(
+    dimension,
+    surface.x,
+    surface.y,
+    surface.z,
+    surface.block
+);
 
         if (candidates.length === 0) {
             debugSpawnResult(
@@ -291,9 +291,10 @@ if (isTooCloseToAnyPlayer(players, dimensionId, spawnLocation)) {
             surface.y,
             surface.z,
             spawned,
-            spawned
-                ? `変身先: ${selectedBlockId}`
-                : "エンティティ生成または装備処理に失敗"
+spawned
+    ? `Tier: ${candidates.length} / 変身先: ${selectedBlockId}`
+    : "エンティティ生成または装備処理に失敗"
+                
         );
     }
 }, CHECK_INTERVAL);
@@ -447,8 +448,6 @@ function isTransformableBlock(block) {
 }
 
 
-// 中心ブロックはスポーン判定を通過したブロック。
-// 周囲4ブロックは同じY座標で検索する。
 function findTransformCandidates(
     dimension,
     x,
@@ -456,12 +455,13 @@ function findTransformCandidates(
     z,
     centerBlock
 ) {
+    // 中央は地面、周囲４か所は１ブロック上を調べる
     const offsets = [
-        { x: 0, z: 0 },
-        { x: 1, z: 0 },
-        { x: -1, z: 0 },
-        { x: 0, z: 1 },
-        { x: 0, z: -1 }
+        { x: 0, y: 0, z: 0 },
+        { x: 1, y: 1, z: 0 },
+        { x: -1, y: 1, z: 0 },
+        { x: 0, y: 1, z: 1 },
+        { x: 0, y: 1, z: -1 }
     ];
 
     const candidates = [];
@@ -470,12 +470,13 @@ function findTransformCandidates(
         let block;
 
         if (offset.x === 0 && offset.z === 0) {
+            // 中央だけは地面ブロックをそのまま使う
             block = centerBlock;
         } else {
             try {
                 block = dimension.getBlock({
                     x: x + offset.x,
-                    y,
+                    y: y + offset.y,
                     z: z + offset.z
                 });
             } catch {
@@ -616,24 +617,47 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
 
 
 // 報酬を出してサルファーキューブを削除
-function openCube(cube) {
-    // Tierタグから報酬を取得
-    // Tierタグがない場合はTier1の報酬にする
-    let reward = TIER_REWARDS["msc_tier_1"];
 
-    for (const [tag, definition] of Object.entries(TIER_REWARDS)) {
-        if (cube.hasTag(tag)) {
-            reward = definition;
-            break;
-        }
+function openCube(cube) {
+    // 実際に付与されているTierタグをすべて確認
+    const matchedTags = Object.keys(TIER_REWARDS).filter(
+        tag => cube.hasTag(tag)
+    );
+
+    // 現在の仕様と同じく、最初に見つかったTierを採用
+    const selectedTag = matchedTags.length > 0
+        ? matchedTags[0]
+        : "msc_tier_1";
+
+    const reward = TIER_REWARDS[selectedTag];
+
+    // 調査用：実際のタグと選択された報酬を表示
+    if (DEBUG_MODE) {
+        world.sendMessage(
+            `[MSC DEBUG] Tierタグ: ${matchedTags.length > 0 ? matchedTags.join(", ") : "なし"} / 採用: ${selectedTag} / 報酬: ${reward.amount}個`
+        );
     }
 
-    try {
-        cube.dimension.spawnItem(
-            new ItemStack(reward.itemId, reward.amount),
-            cube.location
+try {
+    const droppedItem = cube.dimension.spawnItem(
+        new ItemStack(reward.itemId, reward.amount),
+        cube.location
+    );
+
+    const itemComponent = droppedItem.getComponent("minecraft:item");
+
+    if (DEBUG_MODE) {
+        world.sendMessage(
+            `[MSC DEBUG] 生成直後: ${itemComponent.itemStack.typeId} ${itemComponent.itemStack.amount}個`
         );
-    } catch {}
+    }
+} catch (error) {
+    if (DEBUG_MODE) {
+        world.sendMessage(
+            `[MSC DEBUG] アイテム生成エラー: ${error}`
+        );
+    }
+}
 
     try {
         cube.remove();
