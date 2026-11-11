@@ -694,13 +694,14 @@ function playCubeBurst(dimension, location, tier) {
     }
 
     // 白いきらめきを追加
-    for (let i = 0; i < tier * 2; i++) {
+    const spread = Math.cbrt(tier / 4);
+    for (let i = 0; i < tier * 5; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const radius = (0.3 + Math.random() * 1.2) * tier / 4;
+        const radius = (1.0 + Math.random() * 1.5) * spread;
 
         const particleLocation = {
             x: location.x + Math.cos(angle) * radius,
-            y: location.y + Math.random() * 1.5 * tier / 4,
+            y: location.y + Math.random() * 1.5 * spread,
             z: location.z + Math.sin(angle) * radius
         };
 
