@@ -667,7 +667,7 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
 
 
 // キューブ発見時の爆発演出
-function playCubeBurst(dimension, location) {
+function playCubeBurst(dimension, location, tier) {
     // 大きな爆発を中心に発生
     try {
         dimension.spawnParticle(
@@ -677,42 +677,26 @@ function playCubeBurst(dimension, location) {
     } catch {}
 
     // 緑・金色の粒子を周囲に散らす
-    for (let i = 0; i < 12; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 0.4 + Math.random() * 0.9;
+for (let i = 0; i < tier * 3; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = (0.4 + Math.random() * 0.9) * tier / 4;
 
-        const particleLocation = {
-            x: location.x + Math.cos(angle) * radius,
-            y: location.y + Math.random() * 1.2,
-            z: location.z + Math.sin(angle) * radius
-        };
-
-        try {
-            dimension.spawnParticle(
-                "minecraft:totem_particle",
-                particleLocation
-            );
-        } catch {}
-    }
+    const particleLocation = {
+        x: location.x + Math.cos(angle) * radius,
+        y: location.y + Math.random() * 1.2 * tier / 4,
+        z: location.z + Math.sin(angle) * radius
+    };
 
     // 白いきらめきを追加
-    for (let i = 0; i < 8; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 0.3 + Math.random() * 1.2;
+for (let i = 0; i < tier * 2; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = (0.3 + Math.random() * 1.2) * tier / 4;
 
-        const particleLocation = {
-            x: location.x + Math.cos(angle) * radius,
-            y: location.y + Math.random() * 1.5,
-            z: location.z + Math.sin(angle) * radius
-        };
-
-        try {
-            dimension.spawnParticle(
-                "minecraft:endrod",
-                particleLocation
-            );
-        } catch {}
-    }
+    const particleLocation = {
+        x: location.x + Math.cos(angle) * radius,
+        y: location.y + Math.random() * 1.5 * tier / 4,
+        z: location.z + Math.sin(angle) * radius
+    };
 
     // 花火の爆発音
     try {
@@ -730,8 +714,6 @@ function playCubeBurst(dimension, location) {
 // 報酬を出してサルファーキューブを削除
 
 function openCube(cube) {
-        // 報酬処理やエンティティ削除より先に演出
-    playCubeBurst(cube.dimension, { ...cube.location });
     // 実際に付与されているTierタグをすべて確認
     const matchedTags = Object.keys(TIER_REWARDS).filter(
         tag => cube.hasTag(tag)
@@ -741,7 +723,8 @@ function openCube(cube) {
     const selectedTag = matchedTags.length > 0
         ? matchedTags[0]
         : "msc_tier_1";
-
+const tier = Number(selectedTag.substring(TIER_TAG_PREFIX.length));
+playCubeBurst(cube.dimension, { ...cube.location }, tier);
     const reward = TIER_REWARDS[selectedTag];
 
     // 調査用：実際のタグと選択された報酬を表示
