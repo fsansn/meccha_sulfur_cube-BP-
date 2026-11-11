@@ -666,7 +666,7 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
 
 
 
-// キューブ発見時の爆発演出
+ // キューブ発見時の爆発演出
 function playCubeBurst(dimension, location, tier) {
     // 大きな爆発を中心に発生
     try {
@@ -677,26 +677,40 @@ function playCubeBurst(dimension, location, tier) {
     } catch {}
 
     // 緑・金色の粒子を周囲に散らす
-for (let i = 0; i < tier * 3; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = (0.4 + Math.random() * 0.9) * tier / 4;
+    for (let i = 0; i < tier ; i++) {
 
-    const particleLocation = {
-        x: location.x + Math.cos(angle) * radius,
-        y: location.y + Math.random() * 1.2 * tier / 4,
-        z: location.z + Math.sin(angle) * radius
-    };
+        const particleLocation = {
+            x: location.x ,
+            y: location.y ,
+            z: location.z
+        };
+
+        try {
+            dimension.spawnParticle(
+                "minecraft:totem_particle",
+                particleLocation
+            );
+        } catch {}
+    }
 
     // 白いきらめきを追加
-for (let i = 0; i < tier * 2; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = (0.3 + Math.random() * 1.2) * tier / 4;
+    for (let i = 0; i < tier * 2; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = (0.3 + Math.random() * 1.2) * tier / 4;
 
-    const particleLocation = {
-        x: location.x + Math.cos(angle) * radius,
-        y: location.y + Math.random() * 1.5 * tier / 4,
-        z: location.z + Math.sin(angle) * radius
-    };
+        const particleLocation = {
+            x: location.x + Math.cos(angle) * radius,
+            y: location.y + Math.random() * 1.5 * tier / 4,
+            z: location.z + Math.sin(angle) * radius
+        };
+
+        try {
+            dimension.spawnParticle(
+                "minecraft:endrod",
+                particleLocation
+            );
+        } catch {}
+    }
 
     // 花火の爆発音
     try {
